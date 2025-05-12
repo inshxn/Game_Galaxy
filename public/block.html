@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Block Shape Game</title>
+  <style>
+    body {
+      text-align: center;
+      background-color: #000;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: white;
+      font-family: sans-serif;
+    }
+    canvas {
+      border: 2px solid white;
+      background-color: #111;
+      margin-top: 20px;
+    }
+    .info {
+      margin-top: 10px;
+    }
+    #dashboardBtn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      cursor: pointer;
+    }
+    .btn-orange {
+      width: 150px;
+      height: 40px;
+      background-color: orange;
+      border-radius: 5px;
+    }
+    .btn-orange:hover {
+      background-color: rgb(211, 140, 54);
+    }
+    
+    /* Game Over Overlay Styles */
+    #game-over {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+    }
+    
+    #game-over-text {
+      color: white;
+      font-size: 48px;
+      font-weight: bold;
+      margin-bottom: 20px;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    }
+    
+    #final-score, #best-score {
+      color: white;
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+    
+    #playAgainBtn {
+      padding: 10px 20px;
+      font-size: 20px;
+      background-color: #f8d347;
+      color: #333;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-top: 20px;
+    }
+    
+    #playAgainBtn:hover {
+      background-color: #ffdf60;
+    }
+  </style>
+</head>
+<body>
+  <a href="dashboard.html"><button id="dashboardBtn" class="btn-orange">Go to Dashboard</button></a>
+  <h1>Block Shape Game</h1>
+  <canvas id="gameCanvas" width="300" height="600"></canvas>
+  <div class="info">
+    <p>Score: <span id="score">0</span></p>
+    <p>High Score: <span id="highScore">0</span></p>
+  </div>
+  
+  <!-- Game Over Overlay -->
+  <div id="game-over">
+    <div id="game-over-text">GAME OVER</div>
+    <div id="final-score">Your Score: <span id="final-scr">0</span></div>
+    <div id="best-score">Best Score: <span id="best-scr">0</span></div>
+    <button id="playAgainBtn">PLAY AGAIN</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const ROWS = 20;
+    const COLS = 10;
+    const BLOCK_SIZE = 30;
+    const board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+    let score = 0;
+    let highScore = localStorage.getItem("blockGameHighScore") || 0;
+    let gameRunning = true;
+
+    // Initialize high score display
+    document.getElementById("highScore").textContent = highScore;
+
+    const SHAPES = {
+      I: [[1, 1, 1, 1]],
+      O: [
+        [1, 1],
+        [1, 1]
+      ],
+      T: [
+        [0, 1, 0],
+        [1, 1, 1]
+      ],
+      S: [
+        [0, 1, 1],
+        [1, 1, 0]
+      ],
+      Z: [
+        [1, 1, 0],
+        [0, 1, 1]
+      ],
+      L: [
+        [1, 0, 0],
+        [1, 1, 1]
+      ],
+      J: [
+        [0, 0, 1],
+        [1, 1, 1]
+      ]
+    };
+
+    const COLORS = ["cyan", "yellow", "purple", "green", "red", "orange", "blue"];
+
+    function drawBlock(x, y, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+      ctx.strokeStyle = "black";
+      ctx.strokeRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+    }
+
+    function drawBoard() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          if (board[y][x]) {
+            drawBlock(x, y, board[y][x]);
+          }
+        }
+      }
+    }
+
+    function randomShape() {
+      const keys = Object.keys(SHAPES);
+      const randKey = keys[Math.floor(Math.random() * keys.length)];
+      return {
+        shape: SHAPES[randKey],
+        color: COLORS[keys.indexOf(randKey)],
+        x: 3,
+        y: 0
+      };
+    }
+
+    let current = randomShape();
+
+    function collide(shape, offsetX, offsetY) {
+      for (let y = 0; y < shape.length; y++) {
+        for (let x = 0; x < shape[y].length; x++) {
+          if (
+            shape[y][x] &&
+            (board[y + offsetY] && board[y + offsetY][x + offsetX]) !== 0
+          ) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function merge(shape) {
+      shape.shape.forEach((row, y) => {
+        row.forEach((value, x) => {
+          if (value) {
+            board[shape.y + y][shape.x + x] = shape.color;
+          }
+        });
+      });
+    }
+
+    function clearLines() {
+      let lines = 0;
+      for (let y = ROWS - 1; y >= 0; y--) {
+        if (board[y].every(cell => cell !== 0)) {
+          board.splice(y, 1);
+          board.unshift(Array(COLS).fill(0));
+          lines++;
+        }
+      }
+      score += lines;
+      document.getElementById("score").textContent = score;
+    }
+
+    function drop() {
+      if (!gameRunning) return;
+      
+      if (!collide(current.shape, current.x, current.y + 1)) {
+        current.y++;
+      } else {
+        merge(current);
+        clearLines();
+        if (current.y === 0) {
+          endGame();
+          return;
+        }
+        current = randomShape();
+      }
+      draw();
+    }
+
+    function draw() {
+      drawBoard();
+      current.shape.forEach((row, y) => {
+        row.forEach((value, x) => {
+          if (value) {
+            drawBlock(current.x + x, current.y + y, current.color);
+          }
+        });
+      });
+    }
+
+    function endGame() {
+      gameRunning = false;
+      
+      // Update high score if needed
+      if (score > highScore) {
+        highScore = score;
+        localStorage.setItem("blockGameHighScore", highScore);
+        document.getElementById("highScore").textContent = highScore;
+      }
+      
+      // Show game over overlay
+      document.getElementById("final-scr").textContent = score;
+      document.getElementById("best-scr").textContent = highScore;
+      document.getElementById("game-over").style.display = "flex";
+    }
+
+    function resetGame() {
+      // Reset game state
+      score = 0;
+      current = randomShape();
+      board.forEach(row => row.fill(0));
+      gameRunning = true;
+      
+      // Update UI
+      document.getElementById("score").textContent = score;
+      document.getElementById("game-over").style.display = "none";
+      
+      // Redraw
+      draw();
+    }
+
+    document.addEventListener("keydown", e => {
+      if (!gameRunning) return;
+      
+      if (e.key === "ArrowLeft" && !collide(current.shape, current.x - 1, current.y)) {
+        current.x--;
+      } else if (e.key === "ArrowRight" && !collide(current.shape, current.x + 1, current.y)) {
+        current.x++;
+      } else if (e.key === "ArrowDown") {
+        drop();
+      }
+      draw();
+    });
+
+    setInterval(drop, 700);
+
+    document.getElementById("playAgainBtn").addEventListener("click", resetGame);
+  </script>
+</body>
+</html>
